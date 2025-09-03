@@ -83,29 +83,45 @@ char parseKey(String keyStr) {
     if (keyStr == "tab") return KEY_TAB;
     if (keyStr == "enter") return KEY_RETURN;
     if (keyStr == "space") return ' ';
+    if (keyStr.startsWith("0x")) return strtol(keyStr.c_str(), NULL, 16);
     return keyStr[0]; // Если символ не распознан, возвращаем первый символ строки
 }
 
 // Обработка комбинации клавиш, например "ctrl+tab"
 bool handleKeyCombo(String combo) {
-    int idx = combo.indexOf('+'); // Определяем разделитель '+'
-    if (idx == -1) return false;  // Если '+' отсутствует, возвращаем false
+    // Разбиваем строку по символу '+'
+    int keysCount = 0;
+    int keys[10]; // Максимум 10 клавиш в комбинации
+    int lastPos = 0;
 
-    // Парсим модификатор и основную клавишу
-    char modKey = parseKey(combo.substring(0, idx));
-    char mainKey = parseKey(combo.substring(idx + 1));
+    while (true) {
+        int idx = combo.indexOf('+', lastPos);
+        if (idx == -1) {
+            // Добавляем последнюю клавишу
+            String keyStr = combo.substring(lastPos);
+            keys[keysCount++] = parseKey(keyStr);
+            break;
+        }
 
-    // Нажимаем модификатор, затем основную клавишу
-    delay(random(KEY_INTERVAL_MIN, KEY_INTERVAL_MAX));
-    Keyboard.press(modKey);
-    delay(random(KEY_INTERVAL_MIN, KEY_INTERVAL_MAX));
-    Keyboard.press(mainKey);
+        // Добавляем очередную клавишу
+        String keyStr = combo.substring(lastPos, idx);
+        keys[keysCount++] = parseKey(keyStr);
+        lastPos = idx + 1;
 
-    // Отпускаем клавиши в обратном порядке
-    delay(random(KEY_INTERVAL_MIN, KEY_INTERVAL_MAX));
-    Keyboard.release(mainKey);
-    delay(random(KEY_INTERVAL_MIN, KEY_INTERVAL_MAX));
-    Keyboard.release(modKey);
+        if (keysCount >= 10) break; // Защита от переполнения
+    }
+
+    // Нажимаем все клавиши по порядку
+    for (int i = 0; i < keysCount; i++) {
+        Keyboard.press(keys[i]);
+        delay(random(KEY_INTERVAL_MIN, KEY_INTERVAL_MAX));
+    }
+
+    // Отпускаем в обратном порядке
+    for (int i = keysCount - 1; i >= 0; i--) {
+        Keyboard.release(keys[i]);
+        delay(random(KEY_INTERVAL_MIN, KEY_INTERVAL_MAX));
+    }
 
     return true;
 }
