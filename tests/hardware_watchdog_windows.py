@@ -86,7 +86,7 @@ def main():
                         time.sleep(.2)
                 result['checks']['new_session_after_reset']=client.session!=before
                 result['checks']['new_generation_requires_begin']=client.tap(1,4).code=='STALE_GENERATION'
-                result['checks']['handshake_after_wdt']=client.capabilities.firmware=='1.0.0'
+                result['checks']['handshake_after_wdt']=client.capabilities.firmware=='1.1.0'
                 result['checks']['no_modifier_held_after_reconnect']=not(user.GetAsyncKeyState(16)&0x8000)
         except BaseException as exc:
             result['errors'].append(type(exc).__name__+': '+str(exc))

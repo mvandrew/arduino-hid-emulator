@@ -11,7 +11,7 @@ enum Status { DONE, REJECTED, UNKNOWN, ACCEPTED };
 enum Code { OK, READY, ALIVE, CANCELLED, RELEASED, BAD_ARGUMENT, BUSY,
   STALE_GENERATION, BAD_SESSION, UNSUPPORTED_VERSION, UNSUPPORTED_USAGE,
   STALE_ID, SESSION_CONFLICT, CANCELLED_BEFORE_DOWN, UNKNOWN_COMMAND, IO_UNCERTAIN };
-enum Verb { HELLO, HB, BEGIN, TAP, DOWN, UP, CANCEL, RELEASE, CLOSE, INVALID };
+enum Verb { HELLO, HB, BEGIN, TAP, DOWN, UP, CANCEL, RELEASE, CLOSE, CHORD, INVALID };
 inline const char* statusName(Status s) {
   static const char* const names[] = {"DONE", "REJECTED", "UNKNOWN", "ACCEPTED"};
   return names[s];
@@ -34,7 +34,7 @@ inline uint16_t crc16(const char* data, size_t size) {
 struct Command {
   uint32_t id, gen, fingerprint;
   Verb verb;
-  uint8_t usage, mask, hold;
+  uint8_t usage, mask, hold, lead, tail;
 };
 struct Cached { Command cmd; Status status; Code code; bool valid; };
 
@@ -66,8 +66,11 @@ class Engine {
   void tick(uint32_t now, bool connected=true) {
     if (used_ && uint32_t(now-frameAt_)>=100) { used_=0; discard_=true; }
     if (!connected || (session_[0] && uint32_t(now-heartbeatAt_)>=1000)) disconnect();
+    if(active_ && op_.verb==CHORD && uint32_t(now-opAt_)>=100) {
+      finishOp(UNKNOWN,IO_UNCERTAIN); failSession();
+    }
     if (active_ && phase_==0) {
-      Io io=keyboard_(op_.mask, op_.usage);
+      Io io=keyboard_(op_.mask, op_.verb==CHORD?0:op_.usage);
       if (io==SENT) {
         held_=true; holdAt_=now; phase_=1;
         if (op_.verb==DOWN) finishOp(DONE, OK);
@@ -75,14 +78,26 @@ class Engine {
         finishOp(UNKNOWN, IO_UNCERTAIN); failSession();
       }
     }
-    if (active_ && phase_==1 && uint32_t(now-holdAt_)>=op_.hold) releaseNeeded_=true;
+    if(active_ && op_.verb==CHORD && !releaseNeeded_) {
+      if((phase_==1 && uint32_t(now-holdAt_)>=op_.lead) ||
+         (phase_==3 && uint32_t(now-holdAt_)>=op_.hold)) {
+        Io io=keyboard_(op_.mask,phase_==1?op_.usage:0);
+        if(io==SENT) { phase_=phase_==1?3:4; holdAt_=now; }
+        else if(io==IO_FAILED) { finishOp(UNKNOWN,IO_UNCERTAIN); failSession(); }
+      }
+      if(active_ && phase_==4 && uint32_t(now-holdAt_)>=op_.tail) releaseNeeded_=true;
+    }
+    if (active_ && op_.verb!=CHORD && phase_==1 && uint32_t(now-holdAt_)>=op_.hold) releaseNeeded_=true;
     if (held_ && !active_ && uint32_t(now-holdAt_)>=100) releaseNeeded_=true;
     if (active_ && phase_==2) releaseNeeded_=true;
     if (releaseNeeded_) {
       Io io=keyboard_(0,0);
       if (io==SENT) {
         held_=false; releaseNeeded_=false;
-        if (active_) finishOp(DONE, OK);
+        if (active_) {
+          bool beforeKey=op_.verb==CHORD && phase_==1;
+          finishOp(beforeKey?REJECTED:DONE,beforeKey?CANCELLED_BEFORE_DOWN:OK);
+        }
         if (control_) {
           Command cmd=controlCmd_; control_=false;
           terminal(cmd,DONE,cmd.verb==CANCEL ? CANCELLED : cmd.verb==RELEASE ? RELEASED : OK);
@@ -132,7 +147,7 @@ class Engine {
     char out[128];
     int n=snprintf(out,sizeof(out),"R1 %s %lu %lu %s %s%s",sid?sid:session_,
       (unsigned long)cmd.id,(unsigned long)cmd.gen,statusName(status),codeName(code),
-      code==READY ? " 1 1.0.0 0000003F 128 0 1000 100" : "");
+      code==READY ? " 1 1.1.0 0000007F 128 0 1000 100" : "");
     if(n<0 || n+7>=int(sizeof(out))) { failSession(); return false; }
     uint16_t crc=crc16(out,n);
     int tail=snprintf(out+n,sizeof(out)-n," *%04X\n",unsigned(crc));
@@ -181,10 +196,10 @@ class Engine {
     uint32_t fingerprint=2166136261UL;
     for(size_t i=0;i<bodySize;++i) fingerprint=(fingerprint^uint8_t(rx_[i]))*16777619UL;
     star[-1]=0;
-    char* fields[9]; uint8_t count=0; char* p=rx_;
+    char* fields[11]; uint8_t count=0; char* p=rx_;
     if(!*p) return;
     while(true) {
-      if(count==9 || *p==' ') return;
+      if(count==11 || *p==' ') return;
       fields[count++]=p;
       char* space=strchr(p,' ');
       if(!space) break;
@@ -194,9 +209,9 @@ class Engine {
     if(count<5 || strcmp(fields[0],"Q1") || !hex(fields[1],16)) return;
     Command cmd={}; cmd.fingerprint=fingerprint;
     if(!decimal(fields[2],cmd.id)||!cmd.id||!decimal(fields[3],cmd.gen)) return;
-    static const char* const verbs[]={"HELLO","HB","BEGIN","TAP","DOWN","UP","CANCEL","RELEASE","CLOSE"};
+    static const char* const verbs[]={"HELLO","HB","BEGIN","TAP","DOWN","UP","CANCEL","RELEASE","CLOSE","CHORD"};
     cmd.verb=INVALID;
-    for(uint8_t i=0;i<9;++i) if(!strcmp(fields[4],verbs[i])) cmd.verb=Verb(i);
+    for(uint8_t i=0;i<10;++i) if(!strcmp(fields[4],verbs[i])) cmd.verb=Verb(i);
     if(cmd.verb==HELLO && !session_[0]) {
       if(count!=6 || cmd.gen!=0) { reply(cmd,REJECTED,BAD_ARGUMENT,fields[1]); return; }
       if(strcmp(fields[5],"1")) { reply(cmd,REJECTED,UNSUPPORTED_VERSION,fields[1]); return; }
@@ -222,7 +237,7 @@ class Engine {
     }
     if(cmd.id<=highId_) { reply(cmd,REJECTED,STALE_ID); return; }
     highId_=cmd.id;
-    uint8_t expected=cmd.verb==TAP?8:cmd.verb==DOWN?7:cmd.verb==HELLO?6:5;
+    uint8_t expected=cmd.verb==CHORD?10:cmd.verb==TAP?8:cmd.verb==DOWN?7:cmd.verb==HELLO?6:5;
     if(count!=expected) { terminal(cmd,REJECTED,BAD_ARGUMENT); return; }
     if(cmd.verb==INVALID) { terminal(cmd,REJECTED,UNKNOWN_COMMAND); return; }
     bool global=cmd.verb==HELLO||cmd.verb==HB||cmd.verb==RELEASE||cmd.verb==CLOSE;
@@ -258,6 +273,14 @@ class Engine {
       terminal(cmd,REJECTED,BAD_ARGUMENT); return;
     }
     if(usage<4||usage>115) { terminal(cmd,REJECTED,UNSUPPORTED_USAGE); return; }
+    if(cmd.verb==CHORD) {
+      uint32_t lead,tail;
+      if(!mask || !decimal(fields[7],lead)||!decimal(fields[8],hold)||!decimal(fields[9],tail)||
+         lead<1||hold<1||tail<1||lead>90||hold>90||tail>90||lead+hold+tail>90) {
+        terminal(cmd,REJECTED,BAD_ARGUMENT); return;
+      }
+      cmd.lead=lead; cmd.tail=tail;
+    }
     cmd.usage=usage; cmd.mask=mask; cmd.hold=hold;
     op_=cmd; active_=true; phase_=0; opAt_=now;
     reply(cmd,ACCEPTED,OK);

@@ -1,5 +1,28 @@
 # HID v1 validation — 24 October 2026
 
+## Addendum: staged chords, library / firmware 1.1.0
+
+The current pair extends wire v1 with capability STAGED_CHORD (0x40), flags
+0x7F. The baseline evidence below remains the 1.0.0 historical record.
+89 automated tests pass, including native execution of the actual Engine.h:
+four distinct reports/timings; cancellation and disconnect in every phase;
+NOT_EXECUTED before the main key; malformed timing rejection; stale-loop
+UNKNOWN/no late down; continuous 100ms interrupt guard across intermediate reports.
+The Python client validates the feature before sending and does not fall back.
+
+On Leonardo COM3 with AVR Boards 1.8.8 the normal image was compiled and uploaded:
+flash 11786/28672 bytes, RAM 1432/2560 bytes. HEX SHA256:
+`942BBB55F676C22C6E0C026AE4493733D04409342C98AE250A8420C16B02816C`.
+Parent keyboard-service's owned-editor hardware fixture passed 15/15 checks:
+Home 0x4A with modifier 0x02 selects the indentation; separate Shift/Home edges
+were observed; cancellation at Shift-only / Home-held / Shift-tail released
+both keys in 13.405 / 10.480 / 10.218ms with no modifier left down.
+These are individual Windows observations, not hard real-time maxima.
+The 1.1.0 interrupt guard was exercised natively; a fresh physical WDT injection
+was not performed in this addendum. The test helper's post-WDT version check is
+updated for the new pair. VS Code UI automation was rejected by access review;
+owned Tk autoindent behavior is not reported as VS Code integration evidence.
+
 Validated pair: Python API 1.0.0 / firmware 1.0.0 / wire 1, local checked-out
 source in branch `codex/data-transfer-hid-v1`. Git commit identifies the exact
 source; no PyPI release or remote push was performed as part of validation.

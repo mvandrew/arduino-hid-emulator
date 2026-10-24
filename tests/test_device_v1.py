@@ -35,7 +35,7 @@ class FakeSerial:
             return len(data)//2
         frame = decode(data, 'Q1')
         if frame.fields[0] == 'HELLO':
-            self.reply(frame, code='READY', data='1 1.0.0 0000003F 128 0 1000 100')
+            self.reply(frame, code='READY', data='1 1.1.0 0000007F 128 0 1000 100')
         elif self.on_command is not None and self.on_command(frame):
             pass
         else:
@@ -70,7 +70,7 @@ def device(monkeypatch):
 
 def test_exact_completion_and_explicit_outcome(device):
     client, transport = device
-    assert client.capabilities.flags == 0x3F
+    assert client.capabilities.flags == 0x7F
     assert client.begin(1).completed
     result = client.tap(1, 4)
     assert result.outcome is Outcome.COMPLETED
@@ -81,6 +81,31 @@ def test_exact_completion_and_explicit_outcome(device):
     assert client.begin(2).completed
     assert client.release().completed
     assert client.tap(2, 4).outcome is Outcome.NOT_EXECUTED
+
+
+def test_shift_home_is_one_raw_tap_frame_with_left_shift_mask(device):
+    client,transport=device
+    assert client.begin(1).completed
+    assert client.tap(1,0x4A,modifiers=0x02,hold_ms=10).completed
+    taps=[decode(frame,'Q1') for frame in transport.writes if decode(frame,'Q1').fields[0]=='TAP']
+    assert len(taps)==1 and taps[0].fields==('TAP','74','2','10')
+
+
+def test_staged_chord_is_bounded_single_wire_operation(device):
+    client,transport=device;assert client.begin(1).completed
+    assert client.chord(1,74,2,25,40,20).completed
+    frames=[decode(frame,'Q1') for frame in transport.writes]
+    assert frames[-1].fields==('CHORD','74','2','25','40','20')
+    with pytest.raises(ValueError):client.chord(1,74,2,30,50,30)
+
+
+def test_chord_missing_capability_never_falls_back_to_instant_tap(device):
+    from dataclasses import replace
+    client,transport=device
+    client.capabilities=replace(client.capabilities,flags=0x3F)
+    count=len(transport.writes)
+    with pytest.raises(ValueError,match='does not support'):client.chord(1,74,2)
+    assert len(transport.writes)==count
 
 
 @pytest.mark.parametrize('lane', ['read','write'])

@@ -1,4 +1,4 @@
-# HID v1 (library / firmware 1.0.0)
+# HID v1 (library / firmware 1.1.0)
 
 This standalone contract is implemented by `device.py`, `protocol.py` and
 `arduino/hid_emulator/Engine.h`. There is no text/Unicode/mouse command in v1.
@@ -35,6 +35,7 @@ old IDs are rejected STALE_ID. The host never retries a potentially sent action.
 | HB | 0 | Renew session lease; no HID |
 | BEGIN | new positive | Arm a generation above every BEGIN/CANCEL fence |
 | TAP | active / usage mask hold_ms | One down report, then zero report; hold 1..100ms |
+| CHORD | active / usage mask lead_ms hold_ms tail_ms | Modifier-only, modifier+key, modifier-only, zero; positive phases, total <=90ms |
 | DOWN | active / usage mask | One down report, automatic zero after at most 100ms |
 | UP | active | Zero report |
 | CANCEL | positive | Invalidate all generations <= value, release their keys |
@@ -47,10 +48,22 @@ modifier mask in a report, no queued HID operations. A simultaneous action is
 rejected BUSY. Unsupported usages, reserved/error values, invalid argument count
 and noncanonical/overflowed numbers are rejected before any down.
 
-HELLO returns `DONE READY 1 1.0.0 0000003F 128 0 1000 100`: wire major,
+HELLO returns `DONE READY 1 1.1.0 0000007F 128 0 1000 100`: wire major,
 firmware semver, caps, maximum frame, pending HID depth, lease and max hold.
 Caps bits 0..5 are RAW_TAP, BOUNDED_DOWN_UP, CANCEL_FENCE, RELEASE, HEARTBEAT,
 CRC16. The client validates the entire bounded profile before permitting input.
+Bit 6 (0x40) adds STAGED_CHORD. Old 0x3F firmware remains usable for old primitives;
+`chord()` checks the bit before sending. CHORD requires a nonzero modifier mask.
+There is still one HID operation in flight and zero queued operations.
+
+All chord phases are processed by the nonblocking engine; control/HB remain
+available. CANCEL/RELEASE/UP release both key and modifier without later chord
+reports. If the main key never went down, termination is REJECTED /
+CANCELLED_BEFORE_DOWN (only the modifier was pressed and then released). If it
+already went down, release completes the action with DONE / OK. A late/stalled
+chord at 100ms ends UNKNOWN / IO_UNCERTAIN and disarms the session, without
+reasserting a modifier after the safety guard. Intermediate reports do not reset
+the interrupt-level countdown: continuous nonzero state stays bounded by 100ms.
 
 ## Results and failure
 

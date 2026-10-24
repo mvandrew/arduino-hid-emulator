@@ -1,4 +1,4 @@
-# Arduino HID Emulator 1.0.0
+# Arduino HID Emulator 1.1.0
 
 A bounded, explicit-port Python client and Leonardo firmware implementing HID v1.
 The keyboard sends raw USB usage/modifier reports. Unicode text, OS layout
@@ -56,6 +56,12 @@ with HidDevice("COM3", identity=(0x2341, 0x8036, "HIDFG")) as device:
 
 `tap(generation, usage, modifiers=0, hold_ms=10)`, `down(generation, usage,
 modifiers=0)`, `up(generation)`, `cancel(generation)`, `release()`, `close()`.
+Version 1.1 adds `chord(generation, usage, modifiers, lead_ms=25, hold_ms=40,
+tail_ms=20)`: modifier-only → modifier+key → modifier-only → zero. Each duration
+is positive and their sum is <=90ms; capability bit 0x40 is required, with no
+instant-TAP fallback. The independent 100ms guard is not reset by intermediate
+reports. CANCEL/RELEASE can interrupt any phase; cancelling before the main key
+went down returns NOT_EXECUTED/CANCELLED_BEFORE_DOWN after releasing the modifier.
 Use standard page 0x07 usages 4..115 (Enter 40, Backspace 42, Space 44), not
 legacy Arduino Keyboard API numeric constants. A new generation must exceed the
 session's previous BEGIN/CANCEL fence. CANCEL invalidates local dispatch before

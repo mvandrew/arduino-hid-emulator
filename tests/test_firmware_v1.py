@@ -62,7 +62,7 @@ class Engine:
 @pytest.fixture
 def engine(native_library):
     e=Engine(native_library)
-    assert e.send('HELLO',0,1)[0].fields==('DONE','READY','1','1.0.0','0000003F','128','0','1000','100')
+    assert e.send('HELLO',0,1)[0].fields==('DONE','READY','1','1.1.0','0000007F','128','0','1000','100')
     assert e.send('BEGIN',1)[0].fields==('DONE','OK')
     return e
 
@@ -73,6 +73,77 @@ def test_tap_exact_raw_report_and_completion(engine):
     engine.tick(9); assert engine.replies()==[]
     engine.tick(1); assert engine.replies()[0].fields==('DONE','OK')
     assert engine.reports()==[0x0204,0]
+
+
+def test_shift_home_raw_usage_and_modifier_are_released_together(engine):
+    assert engine.send('TAP',1,0x4A,0x02,10)[0].fields==('ACCEPTED','OK')
+    assert engine.reports()==[0x024A]
+    engine.tick(10)
+    assert engine.replies()[0].fields==('DONE','OK')
+    assert engine.reports()==[0x024A,0]
+    engine.send('TAP',1,44,0,10);engine.tick(10)
+    assert engine.reports()==[0x024A,0,44,0]
+
+
+def test_chord_has_distinct_modifier_and_key_edges(engine):
+    assert engine.send('CHORD',1,74,2,25,40,20)[0].fields==('ACCEPTED','OK')
+    assert engine.reports()==[0x0200]
+    engine.tick(24);assert engine.reports()==[0x0200]
+    engine.tick(1);assert engine.reports()==[0x0200,0x024A]
+    engine.tick(39);assert engine.reports()==[0x0200,0x024A]
+    engine.tick(1);assert engine.reports()==[0x0200,0x024A,0x0200]
+    engine.tick(19);assert engine.replies()==[]
+    engine.tick(1);assert engine.reports()==[0x0200,0x024A,0x0200,0]
+    assert engine.replies()[0].fields==('DONE','OK')
+
+
+@pytest.mark.parametrize('steps',[(),(25,),(25,40)])
+def test_chord_cancel_releases_every_phase_and_never_reasserts(engine,steps):
+    engine.send('CHORD',1,74,2,25,40,20)
+    for step in steps:engine.tick(step)
+    prefix=engine.reports()
+    replies=engine.send('CANCEL',1);engine.tick(1000)
+    assert engine.reports()[:len(prefix)]==prefix and engine.reports()[len(prefix):]
+    assert all(report==0 for report in engine.reports()[len(prefix):]) and not engine.lib.is_held()
+    expected=('REJECTED','CANCELLED_BEFORE_DOWN') if not steps else ('DONE','OK')
+    assert replies[0].fields==expected
+
+
+@pytest.mark.parametrize('steps',[(),(25,),(25,40)])
+def test_chord_disconnect_releases_every_phase(engine,steps):
+    engine.send('CHORD',1,74,2,25,40,20)
+    for step in steps:engine.tick(step)
+    prefix=engine.reports();engine.tick(1,False);engine.tick(1000)
+    assert engine.reports()==prefix+[0] and not engine.lib.is_held()
+
+
+@pytest.mark.parametrize('times',[(0,40,20),(25,0,20),(25,40,0),(30,40,30)])
+def test_chord_invalid_timing_does_not_press_anything(engine,times):
+    assert engine.send('CHORD',1,74,2,*times)[0].fields==('REJECTED','BAD_ARGUMENT')
+    assert engine.reports()==[]
+
+
+def test_chord_stalled_loop_cannot_press_again_after_guard_deadline(engine):
+    engine.send('CHORD',1,74,2,25,40,20)
+    engine.tick(100)
+    assert engine.reports()==[0x0200,0] and not engine.lib.is_held()
+    assert engine.replies()[0].fields==('UNKNOWN','IO_UNCERTAIN')
+
+
+def test_chord_reports_do_not_reset_interrupt_hold_guard(native_library):
+    lib=native_library;lib.guard_commit(0);lib.guard_commit(1)
+    for _ in range(50):assert lib.guard_tick()==0
+    lib.guard_commit(1)
+    for _ in range(49):assert lib.guard_tick()==0
+    assert lib.guard_tick()==1
+    lib.guard_commit(0)
+
+
+def test_cancel_shift_home_releases_shift_and_home_without_late_down(engine):
+    engine.send('TAP',1,0x4A,0x02,100)
+    engine.send('CANCEL',1)
+    engine.tick(100)
+    assert engine.reports()==[0x024A,0] and not engine.lib.is_held()
 
 
 def test_cancel_before_down_and_generation_fence(engine):

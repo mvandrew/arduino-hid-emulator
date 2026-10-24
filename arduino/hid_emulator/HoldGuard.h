@@ -4,7 +4,11 @@
 namespace hidv1 {
 class HoldGuard {
  public:
-  void committed(bool nonzero) { held_=nonzero; remaining_=nonzero?100:0; }
+  void committed(bool nonzero) {
+    if(!nonzero) { held_=false; remaining_=0; }
+    else if(!held_) { held_=true; remaining_=100; }
+    // Intermediate chord reports never extend continuous modifier hold.
+  }
   bool tick() {
     if(!held_) return false;
     if(remaining_) --remaining_;

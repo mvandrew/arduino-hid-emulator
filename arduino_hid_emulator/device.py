@@ -232,7 +232,7 @@ class HidDevice:
                     return
                 raise ProtocolError('Conflicting terminal reply')
             if status == 'ACCEPTED':
-                if pending.verb not in ('TAP', 'DOWN', 'UP', 'CANCEL', 'RELEASE', 'CLOSE', 'BEGIN') or code != 'OK' or data:
+                if pending.verb not in ('TAP', 'CHORD', 'DOWN', 'UP', 'CANCEL', 'RELEASE', 'CLOSE', 'BEGIN') or code != 'OK' or data:
                     raise ProtocolError('Invalid acceptance')
                 return
             if status == 'DONE':
@@ -307,6 +307,15 @@ class HidDevice:
     def down(self, generation, usage, modifiers=0):
         self._validate_key(usage, modifiers)
         return self._key('DOWN', generation, usage, modifiers)
+
+    def chord(self, generation, usage, modifiers, lead_ms=25, hold_ms=40, tail_ms=20):
+        self._validate_key(usage,modifiers)
+        times=(lead_ms,hold_ms,tail_ms)
+        if not modifiers or any(type(value) is not int or not 1<=value<=90 for value in times) or sum(times)>90:
+            raise ValueError('Chord phases must be positive and total <=90ms')
+        if not self.capabilities.flags&0x40:
+            raise ValueError('Firmware does not support staged chords')
+        return self._key('CHORD',generation,usage,modifiers,*times)
 
     def up(self, generation):
         return self._key('UP', generation)
