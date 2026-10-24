@@ -1,4 +1,2 @@
-setuptools~=75.6.0
-serial~=0.0.97
-PyAutoGUI~=0.9.54
-pyserial~=3.5
+pyserial==3.5
+# Legacy mouse examples only: pip install -e ".[legacy-mouse]"
