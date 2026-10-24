@@ -168,7 +168,9 @@ class HidDevice:
                 count = self._serial.write(frame)
                 if count != len(frame):
                     self._fault('PARTIAL_WRITE')
-            except (OSError, serial.SerialException):
+            except Exception:
+                # A concurrent Win32 handle close can also raise TypeError in
+                # pyserial's overlapped I/O. Delivery may already be partial.
                 self._fault('WRITE_FAILED')
         finally:
             self._writer.release()
@@ -203,7 +205,9 @@ class HidDevice:
                 buffer.clear()
                 started = None
                 self._accept_response(frame)
-        except (OSError, serial.SerialException, ProtocolError):
+        except Exception:
+            # Driver exceptions must fault the session, never silently kill the
+            # reader while pending commands/heartbeat still appear healthy.
             if not self._stop.is_set():
                 self._fault('INVALID_RESPONSE_OR_DISCONNECT')
 
@@ -343,14 +347,16 @@ class HidDevice:
             if method:
                 try:
                     method()
-                except (OSError, serial.SerialException):
+                except Exception:
                     pass
-        self._serial.close()
-        for thread in (self._reader_thread, self._heartbeat_thread):
-            if thread and thread is not threading.current_thread():
-                thread.join(max(0, deadline-time.monotonic()))
-        with self._state:
-            self._closed = True
+        try:
+            self._serial.close()
+        finally:
+            for thread in (self._reader_thread, self._heartbeat_thread):
+                if thread and thread is not threading.current_thread():
+                    thread.join(max(0, deadline-time.monotonic()))
+            with self._state:
+                self._closed = True
 
     def __enter__(self):
         return self

@@ -108,3 +108,16 @@ tasks (DT-006/009/010/013), not capabilities of this library or firmware.
 Raw generated JSON, binary builds, venvs and machine paths remain under ignored
 `keyboard-service/build/` on the validation host; this report, scripts, protocol
 fixtures and source are the versioned evidence.
+
+## DT-009 integration repair — 2026-10-24
+
+The parent application's real Windows serial-close test exposed a pyserial
+overlapped-I/O race: a concurrent handle close can raise TypeError rather than
+SerialException. Reader/writer transport exceptions now fault the session and
+resolve possibly delivered commands as UNKNOWN; no retry or healthy orphaned
+reader is allowed. Close attempts both I/O cancellations and joins the workers
+even if the driver reports an exception. Regression tests cover read/write and
+cancel/close failures. The complete suite passes **71 tests**, including native
+Engine tests with Zig 0.14.1, with no skips. API/wire/firmware remain 1.0.0/v1;
+the unpublished implementation is identified by its new Git commit. The
+parent's DT-009 report records the repeated physical pipeline validation.

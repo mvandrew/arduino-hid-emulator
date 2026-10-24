@@ -83,6 +83,52 @@ def test_exact_completion_and_explicit_outcome(device):
     assert client.tap(2, 4).outcome is Outcome.NOT_EXECUTED
 
 
+@pytest.mark.parametrize('lane', ['read','write'])
+def test_unexpected_win32_driver_exception_fails_closed(device, lane):
+    client, transport = device
+    assert client.begin(1).completed
+    original = transport.write
+    def command(data):
+        frame = decode(data,'Q1')
+        if frame.fields[0] == 'TAP':
+            if lane == 'write':
+                raise TypeError('simulated overlapped handle close')
+            def failed_read(size):
+                raise TypeError('simulated overlapped handle close')
+            transport.read = failed_read
+            return len(data)
+        return original(data)
+    transport.write = command
+    result = client.tap(1,4)
+    assert result.outcome is Outcome.UNKNOWN and not client.healthy
+    assert client.tap(1,4).outcome is Outcome.NOT_EXECUTED
+
+
+@pytest.mark.parametrize('fail_close', [False, True])
+def test_close_finishes_cleanup_after_driver_cancel_error(device, fail_close):
+    client, transport = device
+    calls = []
+    def cancel_read():
+        calls.append('cancel_read')
+        raise TypeError('overlapped handle already closed')
+    def close():
+        calls.append('close')
+        transport.closed = True
+        if fail_close:
+            raise OSError('handle close failure')
+    transport.cancel_read = cancel_read
+    transport.cancel_write = lambda:calls.append('cancel_write')
+    transport.close = close
+    if fail_close:
+        with pytest.raises(OSError):
+            client.close()
+    else:
+        client.close()
+    assert calls == ['cancel_read','cancel_write','close']
+    assert client._closed and not client.healthy
+    assert not client._reader_thread.is_alive()
+
+
 @pytest.mark.parametrize('mode', ['ack_lost', 'accepted_only', 'partial', 'disconnect', 'bad_crc', 'wrong_generation', 'wrong_session', 'wrong_code', 'late'])
 def test_uncertain_commands_are_never_retried(device, mode):
     client, transport = device
