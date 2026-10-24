@@ -1,0 +1,53 @@
+{
+  "algorithm_check": {
+    "input": "123456789",
+    "crc": "29B1"
+  },
+  "vectors": [
+    {
+      "body": "Q1 0123456789ABCDEF 1 0 HELLO 1",
+      "crc": "CFF8",
+      "frame": "Q1 0123456789ABCDEF 1 0 HELLO 1 *CFF8\n"
+    },
+    {
+      "body": "R1 0123456789ABCDEF 1 0 DONE READY 1 1.0.0 0000003F 128 0 1000 100",
+      "crc": "F9BA",
+      "frame": "R1 0123456789ABCDEF 1 0 DONE READY 1 1.0.0 0000003F 128 0 1000 100 *F9BA\n"
+    },
+    {
+      "body": "Q1 0123456789ABCDEF 2 1 BEGIN",
+      "crc": "B962",
+      "frame": "Q1 0123456789ABCDEF 2 1 BEGIN *B962\n"
+    },
+    {
+      "body": "R1 0123456789ABCDEF 2 1 DONE OK",
+      "crc": "CE75",
+      "frame": "R1 0123456789ABCDEF 2 1 DONE OK *CE75\n"
+    },
+    {
+      "body": "Q1 0123456789ABCDEF 3 1 TAP 4 0 10",
+      "crc": "31D7",
+      "frame": "Q1 0123456789ABCDEF 3 1 TAP 4 0 10 *31D7\n"
+    },
+    {
+      "body": "R1 0123456789ABCDEF 3 1 ACCEPTED OK",
+      "crc": "E8A0",
+      "frame": "R1 0123456789ABCDEF 3 1 ACCEPTED OK *E8A0\n"
+    },
+    {
+      "body": "R1 0123456789ABCDEF 3 1 DONE OK",
+      "crc": "163C",
+      "frame": "R1 0123456789ABCDEF 3 1 DONE OK *163C\n"
+    },
+    {
+      "body": "Q1 0123456789ABCDEF 4 1 CANCEL",
+      "crc": "8AEF",
+      "frame": "Q1 0123456789ABCDEF 4 1 CANCEL *8AEF\n"
+    },
+    {
+      "body": "R1 0123456789ABCDEF 4 1 DONE CANCELLED",
+      "crc": "AC38",
+      "frame": "R1 0123456789ABCDEF 4 1 DONE CANCELLED *AC38\n"
+    }
+  ]
+}

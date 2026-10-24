@@ -1,9 +1,10 @@
+"""LEGACY ONLY: upload arduino/legacy_hid_emulator; incompatible with HID v1."""
 from arduino_hid_emulator.arduino import ArduinoConnection
 from arduino_hid_emulator.mouse import MouseController
 
 def main():
     # Подключение к Arduino
-    arduino = ArduinoConnection()
+    arduino = ArduinoConnection(port="COM3", legacy=True)
     mouse = MouseController(arduino)
 
     # Выполняем калибровку
@@ -15,7 +16,7 @@ def main():
 
     # Тестируем перемещение с новыми коэффициентами
     print("Тестовое перемещение с новыми коэффициентами.")
-    mouse.move_direct(100, 100)
+    mouse.mouse_direct(100, 100)
 
     # Плавное перемещение
     print("Начинается плавное перемещение курсора.")

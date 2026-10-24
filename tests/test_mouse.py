@@ -1,4 +1,6 @@
 from unittest.mock import MagicMock
+import pytest
+pytest.importorskip('pyautogui')
 from arduino_hid_emulator.mouse import MouseController
 
 
