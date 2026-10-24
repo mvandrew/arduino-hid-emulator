@@ -89,7 +89,7 @@ class MouseController:
             print(f"Курсор установлен в центр экрана: {reference_x}, {reference_y}")
 
             # 2. Перемещаем курсор на 50 пикселей по X и Y средствами Arduino
-            self.move_direct(50, 50)
+            self.mouse_direct(reference_x + 50, reference_y + 50)
             time.sleep(0.2)  # Даем время для обработки движения Arduino
 
             # 3. Фиксируем новые координаты курсора

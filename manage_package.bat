@@ -80,11 +80,8 @@ if %ERRORLEVEL% neq 0 (
 exit /b
 
 :test
-call :clean
-call :build
-call :test-publish
-call :test-install
-exit /b
+python -m pytest -q
+exit /b %ERRORLEVEL%
 
 :menu
 echo Usage: manage_package.bat [command]
@@ -94,5 +91,5 @@ echo   build          - Build the package
 echo   test-publish   - Publish to TestPyPI
 echo   publish        - Publish to PyPI
 echo   test-install   - Install from TestPyPI
-echo   test           - Full test (clean, build, publish to TestPyPI, and install)
+echo   test           - Local pytest checks only (no publishing)
 exit /b
